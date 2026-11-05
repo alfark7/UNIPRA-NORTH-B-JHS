@@ -31,8 +31,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Separator } from '../ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { compressImageFile, compressBase64Image } from '@/lib/image-utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle2, ArrowLeft, Award, BookOpen } from 'lucide-react';
 
 const ranks = ['SUPT1', 'SENIOR SUPT.2', 'SENIOR SUPT.1', 'PRINCIPAL SUPT', 'ASSISTANT DIRECTOR 2', 'ASSISTANT DIRECTOR 1', 'DEPUTY DIRECTOR', 'DIRECTOR', 'DIRECTOR GENERAL'] as const;
 const grades = Array.from({ length: 9 }, (_, i) => String(1 + i)); // 1-9
@@ -83,6 +84,9 @@ interface TeacherFormProps {
 
 export function TeacherForm({ isOpen, onClose, onSave, teacher }: TeacherFormProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [pendingTeacherData, setPendingTeacherData] = useState<any | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<TeacherFormValues>({
     resolver: zodResolver(formSchema),
@@ -203,10 +207,25 @@ export function TeacherForm({ isOpen, onClose, onSave, teacher }: TeacherFormPro
       }
     }
 
-    onSave({ ...dataToSave, avatar: finalAvatar }, teacher?.id);
+    // Intercept with Confirmation Details before permanent save
+    setPendingTeacherData({ ...dataToSave, avatar: finalAvatar });
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingTeacherData) return;
+    setIsSaving(true);
+    try {
+      await onSave(pendingTeacherData, teacher?.id);
+      setIsConfirmOpen(false);
+      setPendingTeacherData(null);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -296,11 +315,113 @@ export function TeacherForm({ isOpen, onClose, onSave, teacher }: TeacherFormPro
                   Cancel
                 </Button>
               </DialogClose>
-              <Button type="submit">Save</Button>
+              <Button type="submit">Save Teacher</Button>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation Details Dialog */}
+    <Dialog open={isConfirmOpen} onOpenChange={(open) => { if (!open && !isSaving) setIsConfirmOpen(false); }}>
+      <DialogContent className="sm:max-w-[540px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary font-headline text-xl">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            Confirmation Details
+          </DialogTitle>
+          <DialogDescription>
+            Please review the teacher's credentials, qualifications, and station information before permanent save.
+          </DialogDescription>
+        </DialogHeader>
+
+        {pendingTeacherData && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3.5 p-3 rounded-lg border bg-muted/30">
+              <Avatar className="h-14 w-14 border shadow-sm">
+                <AvatarImage src={pendingTeacherData.avatar} />
+                <AvatarFallback className="font-bold text-lg bg-primary/10 text-primary">
+                  {pendingTeacherData.firstName?.[0]}
+                  {pendingTeacherData.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h4 className="font-semibold text-base text-foreground">
+                  {pendingTeacherData.firstName} {pendingTeacherData.lastName}
+                </h4>
+                <p className="text-xs text-muted-foreground font-mono">
+                  Staff ID: <span className="font-semibold text-foreground">{pendingTeacherData.staffId}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Teacher Name</span>
+                <span className="font-semibold text-sm text-foreground">{pendingTeacherData.firstName} {pendingTeacherData.lastName}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Staff ID / Reg No.</span>
+                <span className="font-mono font-semibold text-sm text-foreground">{pendingTeacherData.staffId}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Designated Role</span>
+                <span className="font-semibold text-sm text-foreground">{pendingTeacherData.role}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Rank & Grade</span>
+                <span className="font-semibold text-sm text-foreground">{pendingTeacherData.rank} (Grade {pendingTeacherData.grade})</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5 col-span-2">
+                <span className="text-muted-foreground block text-[11px] font-medium">Subjects Taught</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {pendingTeacherData.subjects.map((sub: string) => (
+                    <Badge key={sub} variant="secondary" className="text-xs">
+                      {sub}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-md border bg-muted/20 col-span-2 flex justify-between text-[11px] text-muted-foreground">
+                <span>Phone: <strong className="text-foreground">{pendingTeacherData.phone}</strong></span>
+                <span>Bank: <strong className="text-foreground">{pendingTeacherData.nameOfBank}</strong> ({pendingTeacherData.bankBranch})</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-between pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => setIsConfirmOpen(false)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Return to {teacher ? 'Edit Teacher' : 'Add Teacher'}
+          </Button>
+          <Button
+            type="button"
+            disabled={isSaving}
+            onClick={handleConfirmSave}
+            className="gap-1.5 font-medium shadow-sm bg-primary"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving Permanently...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Confirm & Permanent Save
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

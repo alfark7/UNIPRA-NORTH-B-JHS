@@ -57,12 +57,16 @@ const classLevels = ['JHS1', 'JHS2', 'JHS3'];
 const streams = ['A', 'B', 'C', 'D'];
 const sections = ['RED', 'YELLOW', 'BLUE', 'GREEN'] as const;
 
+import { Badge } from '@/components/ui/badge';
 import { compressImageFile, compressBase64Image } from '@/lib/image-utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle2, ArrowLeft, ShieldCheck, UserCheck } from 'lucide-react';
 
 export function StudentForm({ isOpen, onClose, onSave, student, existingStudents = [] }: StudentFormProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+  const [pendingStudentData, setPendingStudentData] = useState<any | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(formSchema),
@@ -187,10 +191,25 @@ export function StudentForm({ isOpen, onClose, onSave, student, existingStudents
       }
     }
 
-    onSave({ ...dataToSave, avatar: finalAvatar }, student?.id);
+    // Intercept with Confirmation Details before permanent save
+    setPendingStudentData({ ...dataToSave, avatar: finalAvatar });
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingStudentData) return;
+    setIsSaving(true);
+    try {
+      await onSave(pendingStudentData, student?.id);
+      setIsConfirmOpen(false);
+      setPendingStudentData(null);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -427,7 +446,7 @@ export function StudentForm({ isOpen, onClose, onSave, student, existingStudents
                     Optimizing...
                   </>
                 ) : (
-                  'Save'
+                  'Save Student'
                 )}
               </Button>
             </DialogFooter>
@@ -435,5 +454,105 @@ export function StudentForm({ isOpen, onClose, onSave, student, existingStudents
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation Details Dialog */}
+    <Dialog open={isConfirmOpen} onOpenChange={(open) => { if (!open && !isSaving) setIsConfirmOpen(false); }}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary font-headline text-xl">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            Confirmation Details
+          </DialogTitle>
+          <DialogDescription>
+            Please review the student credentials and enrollment information below before permanent save.
+          </DialogDescription>
+        </DialogHeader>
+
+        {pendingStudentData && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3.5 p-3 rounded-lg border bg-muted/30">
+              <Avatar className="h-14 w-14 border shadow-sm">
+                <AvatarImage src={pendingStudentData.avatar} />
+                <AvatarFallback className="font-bold text-lg bg-primary/10 text-primary">
+                  {pendingStudentData.firstName?.[0]}
+                  {pendingStudentData.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h4 className="font-semibold text-base text-foreground">
+                  {pendingStudentData.firstName} {pendingStudentData.lastName}
+                </h4>
+                <p className="text-xs text-muted-foreground font-mono">
+                  Admission No: <span className="font-semibold text-foreground">{pendingStudentData.admissionNumber}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Student Name</span>
+                <span className="font-semibold text-sm text-foreground">{pendingStudentData.firstName} {pendingStudentData.lastName}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Admission Number</span>
+                <span className="font-mono font-semibold text-sm text-foreground">{pendingStudentData.admissionNumber}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Class</span>
+                <span className="font-semibold text-sm text-foreground">{pendingStudentData.class}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5">
+                <span className="text-muted-foreground block text-[11px] font-medium">Stream</span>
+                <span className="font-semibold text-sm text-foreground">{pendingStudentData.stream || 'None (General)'}</span>
+              </div>
+              <div className="p-3 rounded-md border bg-background space-y-0.5 col-span-2">
+                <span className="text-muted-foreground block text-[11px] font-medium">Assigned Section</span>
+                <div className="mt-1">
+                  <Badge variant="outline" className="font-semibold text-xs px-2.5 py-0.5">
+                    {pendingStudentData.section}
+                  </Badge>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-md border bg-muted/20 col-span-2 flex justify-between text-[11px] text-muted-foreground">
+                <span>Gender: <strong className="text-foreground">{pendingStudentData.gender}</strong></span>
+                <span>Guardian: <strong className="text-foreground">{pendingStudentData.guardianName}</strong> ({pendingStudentData.guardianPhone})</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-between pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => setIsConfirmOpen(false)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Return to {student ? 'Edit Student' : 'Add Student'}
+          </Button>
+          <Button
+            type="button"
+            disabled={isSaving}
+            onClick={handleConfirmSave}
+            className="gap-1.5 font-medium shadow-sm bg-primary"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving Permanently...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Confirm & Permanent Save
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
