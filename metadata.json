@@ -1,0 +1,8 @@
+{
+  "name": "UnipraNorthBJHS",
+  "description": "App imported from Firebase Studio ,created by Alfred Arkorful\n",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

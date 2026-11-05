@@ -1,0 +1,10 @@
+{
+  "placeholderImages": [
+    {
+      "id": "school_logo",
+      "description": "The logo for the school",
+      "imageUrl": "https://picsum.photos/seed/school/200/200",
+      "imageHint": "school logo"
+    }
+  ]
+}

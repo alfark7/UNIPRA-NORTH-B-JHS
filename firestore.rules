@@ -1,0 +1,298 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================
+    // DEFAULT SECURITY
+    // =====================================================
+    // Deny all by default unless explicit rule permits.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =====================================================
+    // HELPER FUNCTIONS
+    // =====================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return isSignedIn() &&
+        exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function userRole() {
+      return userExists()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : '';
+    }
+
+    // =====================================================
+    // ROLES
+    // =====================================================
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'alfredarkorful75@gmail.com' ||
+          request.auth.token.email == 'alfark7777@gmail.com' ||
+          request.auth.token.email == 'admin@upnjhs.ac.pg' ||
+          (
+            userExists() &&
+            userRole() == 'Administrator'
+          )
+        );
+    }
+
+    function isHeadmistress() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'headmistress@upnjhs.ac.pg' ||
+          request.auth.token.email == 'headteacher@upnjhs.ac.pg' ||
+          (
+            userExists() &&
+            (userRole() == 'Headmistress' || userRole() == 'Head Teacher')
+          )
+        );
+    }
+
+    function isTeacher() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'teacher@upnjhs.ac.pg' ||
+          (
+            userExists() &&
+            userRole() == 'Teacher'
+          )
+        );
+    }
+
+    function isExamsOfficer() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'exams@upnjhs.ac.pg' ||
+          (
+            userExists() &&
+            userRole() == 'Examinations Officer'
+          )
+        );
+    }
+
+    function isStudent() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'student@upnjhs.ac.pg' ||
+          (
+            userExists() &&
+            userRole() == 'Student'
+          )
+        );
+    }
+
+    function isStaff() {
+      return isSignedIn() &&
+        (
+          isAdmin() ||
+          isHeadmistress() ||
+          isTeacher() ||
+          isExamsOfficer() ||
+          (userExists() && userRole() != 'Student') ||
+          !isStudent()
+        );
+    }
+
+    function myStudentId() {
+      return userExists() && 'studentId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId
+        : '';
+    }
+
+    // =====================================================
+    // STUDENTS
+    // =====================================================
+
+    match /students/{studentId} {
+
+      // ADMINISTRATOR, HEADMISTRESS, TEACHERS & STAFF
+      // School staff can view, add, update, and manage student profiles.
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isExamsOfficer() || isStaff();
+
+      // STUDENT
+      // Students can view their own profile.
+      allow read: if isStudent() &&
+        (
+          myStudentId() == studentId ||
+          (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId()) ||
+          (resource != null && 'admissionNumber' in resource.data && resource.data.admissionNumber == myStudentId())
+        );
+    }
+
+    // =====================================================
+    // MARKS
+    // =====================================================
+
+    match /marks/{markId} {
+
+      // School staff can manage marks/scores.
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isExamsOfficer() || isStaff();
+
+      // STUDENT
+      // Student can see only their own marks.
+      allow read: if isStudent() &&
+        (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId());
+    }
+
+    // =====================================================
+    // ACADEMIC RECORDS (MARKS / REPORT CARD GRADES)
+    // =====================================================
+
+    match /academicRecords/{recordId} {
+
+      // School staff can enter and manage academic scores.
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isExamsOfficer() || isStaff();
+
+      // STUDENT
+      allow read: if isStudent() &&
+        (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId());
+    }
+
+    // =====================================================
+    // ATTENDANCE
+    // =====================================================
+
+    match /attendance/{attendanceId} {
+
+      // School staff can take, edit, and view student attendance.
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isExamsOfficer() || isStaff();
+
+      // STUDENT
+      // Student can see only their own attendance.
+      allow read: if isStudent() &&
+        (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId());
+    }
+
+    // =====================================================
+    // REPORTS
+    // =====================================================
+
+    match /reports/{reportId} {
+
+      // School staff can compile and generate reports.
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isExamsOfficer() || isStaff();
+
+      // STUDENT
+      // Student can view their own terminal report.
+      allow read: if isStudent() &&
+        (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId());
+    }
+
+    // =====================================================
+    // EXAMINATIONS
+    // =====================================================
+
+    match /examinations/{examId} {
+
+      // Full examination management.
+      allow read, write: if isAdmin() || isHeadmistress() || isExamsOfficer() || isStaff();
+
+      // View examination schedules.
+      allow read: if isSignedIn();
+    }
+
+    // =====================================================
+    // RESULTS
+    // =====================================================
+
+    match /results/{resultId} {
+
+      // Examination result management.
+      allow read, write: if isAdmin() || isHeadmistress() || isExamsOfficer() || isStaff();
+
+      // Teachers can view results.
+      allow read: if isTeacher();
+
+      // Students can view their own result.
+      allow read: if isStudent() &&
+        (resource != null && 'studentId' in resource.data && resource.data.studentId == myStudentId());
+    }
+
+    // =====================================================
+    // BECE RECORDS
+    // =====================================================
+
+    match /beceRecords/{beceId} {
+
+      // Full control of BECE national exam records.
+      allow read, write: if isAdmin() || isHeadmistress() || isExamsOfficer() || isStaff();
+
+      // All authenticated school members can view BECE records and performance analysis
+      allow read: if isSignedIn();
+    }
+
+    // =====================================================
+    // CLASSES
+    // =====================================================
+
+    match /classes/{classId} {
+
+      // Class management.
+      allow read, write: if isAdmin() || isHeadmistress() || isStaff();
+
+      // Staff and students can view classes.
+      allow read: if isSignedIn();
+    }
+
+    // =====================================================
+    // USERS
+    // =====================================================
+
+    match /users/{userId} {
+
+      // All authenticated users can view profiles in the school directory
+      allow read: if isSignedIn();
+
+      // ADMINISTRATOR, HEADMISTRESS & STAFF can manage accounts
+      allow write: if isAdmin() || isHeadmistress() || isStaff();
+
+      // Any authenticated user can view, initialize, update, and manage their own profile doc
+      allow write: if isSignedIn() && request.auth.uid == userId;
+
+      // Authenticated users can claim or update their pre-registered profile matching their email
+      allow write: if isSignedIn() && (
+        (request.auth.token.email != null && userId == request.auth.token.email) ||
+        (resource != null && 'email' in resource.data && request.auth.token.email != null && resource.data.email == request.auth.token.email)
+      );
+    }
+
+    // =====================================================
+    // TEACHERS
+    // =====================================================
+
+    match /teachers/{teacherId} {
+
+      // ADMINISTRATOR, HEADMISTRESS & STAFF
+      allow read, write: if isAdmin() || isHeadmistress() || isTeacher() || isStaff();
+
+      // All users can view teacher directory.
+      allow read: if isSignedIn();
+    }
+
+    // =====================================================
+    // SCHOOL INFORMATION
+    // =====================================================
+
+    match /schoolInfo/{infoId} {
+
+      // School info management.
+      allow write: if isAdmin() || isHeadmistress() || isStaff();
+
+      // All users and unauthenticated visitors on the login page can view school metadata and logo.
+      allow read: if true;
+    }
+  }
+}

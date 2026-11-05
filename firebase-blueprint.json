@@ -1,0 +1,220 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Represents a student enrolled in the school.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "class": { "type": "string" },
+        "classId": { "type": "string" },
+        "stream": { "type": ["string", "null"] },
+        "section": { "type": "string", "enum": ["RED", "YELLOW", "BLUE", "GREEN"] },
+        "gender": { "type": "string", "enum": ["Male", "Female"] },
+        "guardianName": { "type": "string" },
+        "guardianPhone": { "type": "string" },
+        "dateOfBirth": { "type": "string", "format": "date" },
+        "avatar": { "type": "string", "format": "uri" },
+        "admissionNumber": { "type": "string" },
+        "conduct": { "type": "string" },
+        "interest": { "type": "string" },
+        "classTeacherRemark": { "type": "string" },
+        "headTeacherRemark": { "type": "string" }
+      },
+      "required": ["id", "firstName", "lastName", "classId"]
+    },
+    "Mark": {
+      "title": "Mark",
+      "description": "Represents a mark or score recorded for a student in a subject.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "term": { "type": "number" },
+        "academicYear": { "type": "string" },
+        "classScore": { "type": "number" },
+        "examScore": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "grade": { "type": "string" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["id", "studentId", "classId", "subject", "term", "academicYear"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Represents a student attendance record for a class session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Present", "Absent", "Late"] },
+        "time": { "type": "string" }
+      },
+      "required": ["id", "studentId", "classId", "date", "status"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Represents a terminal or academic performance report for a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "term": { "type": "number" },
+        "overallScore": { "type": "number" },
+        "position": { "type": "string" },
+        "attendanceSummary": { "type": "string" },
+        "conduct": { "type": "string" },
+        "teacherRemarks": { "type": "string" },
+        "headRemarks": { "type": "string" }
+      },
+      "required": ["id", "studentId", "classId", "academicYear", "term"]
+    },
+    "Examination": {
+      "title": "Examination",
+      "description": "Represents an examination schedule or session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "term": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Upcoming", "Ongoing", "Completed"] }
+      },
+      "required": ["id", "title", "academicYear", "term", "status"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Represents finalized examination results for a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "examId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "term": { "type": "number" },
+        "subjectScores": { "type": "object" },
+        "overallGrade": { "type": "string" }
+      },
+      "required": ["id", "studentId", "classId", "examId"]
+    },
+    "BeceRecord": {
+      "title": "BeceRecord",
+      "description": "Represents Basic Education Certificate Examination (BECE) results and index entries.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "indexNumber": { "type": "string" },
+        "year": { "type": "string" },
+        "aggregate": { "type": "number" },
+        "subjects": { "type": "object" },
+        "schoolPlaced": { "type": "string" }
+      },
+      "required": ["id", "studentId", "classId", "indexNumber", "year"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "Represents an academic class in the school.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "level": { "type": "string", "enum": ["JHS1", "JHS2", "JHS3"] },
+        "section": { "type": "string" },
+        "classTeacherId": { "type": "string" },
+        "room": { "type": "string" }
+      },
+      "required": ["id", "name", "level"]
+    },
+    "AppUser": {
+      "title": "AppUser",
+      "description": "Represents a system user with role, assigned classes, or student ID.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["Administrator", "Headmistress", "Teacher", "Examinations Officer", "Student"] },
+        "assignedClassIds": { "type": "array", "items": { "type": "string" } },
+        "studentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    },
+    "SchoolInfo": {
+      "title": "SchoolInfo",
+      "description": "Represents institutional profile, configuration, and academic calendar metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "motto": { "type": "string" },
+        "currentAcademicYear": { "type": "string" },
+        "currentTerm": { "type": "number" },
+        "reopeningDate": { "type": "string", "format": "date" },
+        "vacationDate": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "name", "currentAcademicYear", "currentTerm"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Stores student profile information."
+    },
+    "/marks/{markId}": {
+      "schema": { "$ref": "#/entities/Mark" },
+      "description": "Stores marks and continuous assessment data."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Stores student attendance records."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Stores student academic and terminal performance reports."
+    },
+    "/examinations/{examId}": {
+      "schema": { "$ref": "#/entities/Examination" },
+      "description": "Stores examination sessions and schedules."
+    },
+    "/results/{resultId}": {
+      "schema": { "$ref": "#/entities/Result" },
+      "description": "Stores computed and released examination results."
+    },
+    "/beceRecords/{beceId}": {
+      "schema": { "$ref": "#/entities/BeceRecord" },
+      "description": "Stores national BECE examination performance records."
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/Class" },
+      "description": "Stores classes, sections, and class teacher assignments."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/AppUser" },
+      "description": "Stores user profiles, system roles (Administrator, Headmistress, Teacher, Examinations Officer, Student), assignedClassIds, and studentId."
+    },
+    "/schoolInfo/{infoId}": {
+      "schema": { "$ref": "#/entities/SchoolInfo" },
+      "description": "Stores general school profile and academic term parameters."
+    }
+  }
+}
