@@ -9,7 +9,8 @@ import {
   GoogleAuthProvider, 
   signOut as firebaseSignOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -37,10 +38,35 @@ export function useUser() {
   useEffect(() => {
     if (!auth) return;
 
+    // Check if there is already a simulated session in storage
+    const checkSimulatedSession = (): { user: any; profile: AppUser } | null => {
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = sessionStorage.getItem('upjhs_simulated_session') || localStorage.getItem('upjhs_simulated_session');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.user && parsed.profile) {
+              return parsed;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to parse stored simulated session:", e);
+        }
+      }
+      return null;
+    };
+
+    const initialSimulated = checkSimulatedSession();
+    if (initialSimulated) {
+      setUser(initialSimulated.user);
+      setProfile(initialSimulated.profile);
+      setLoading(false);
+    }
+
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      setUser(firebaseUser);
-      
       if (firebaseUser) {
+        setUser(firebaseUser);
+        
         try {
           // 1. Try to read the profile of user by UID
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
@@ -75,7 +101,6 @@ export function useUser() {
                 const emailSnap = await getDoc(emailDocRef);
                 if (emailSnap.exists()) {
                   emailData = emailSnap.data();
-                  // Clean up temporary email-based doc
                   deleteDoc(emailDocRef).catch(console.warn);
                 }
               } catch (placeholderErr: any) {
@@ -132,7 +157,6 @@ export function useUser() {
           }
         } catch (err: any) {
           console.warn("Handled profile sync issue:", err?.message || err);
-          // Set a default working profile based on user email to prevent blocking UI
           const emailLower = (firebaseUser.email || '').toLowerCase().trim();
           const isAdminUser = emailLower === 'alfredarkorful75@gmail.com' || emailLower === 'alfark7777@gmail.com' || emailLower === 'admin@upnjhs.ac.pg';
           setProfile({
@@ -147,12 +171,42 @@ export function useUser() {
           setLoading(false);
         }
       } else {
-        setProfile(null);
-        setLoading(false);
+        // If Firebase User is null, check if we have a simulated session active
+        const savedSimulated = checkSimulatedSession();
+        if (savedSimulated) {
+          setUser(savedSimulated.user);
+          setProfile(savedSimulated.profile);
+          setLoading(false);
+        } else {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
       }
     });
 
-    return () => unsubscribe();
+    const handleSessionChange = () => {
+      const session = checkSimulatedSession();
+      if (session) {
+        setUser(session.user);
+        setProfile(session.profile);
+        setLoading(false);
+      } else if (!auth.currentUser) {
+        setUser(null);
+        setProfile(null);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth_session_changed', handleSessionChange);
+    }
+
+    return () => {
+      unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('auth_session_changed', handleSessionChange);
+      }
+    };
   }, [auth, firestore]);
 
   const loginWithGoogle = async () => {
@@ -164,12 +218,25 @@ export function useUser() {
         prompt: 'select_account',
       });
       const result = await signInWithPopup(auth, provider);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('upjhs_simulated_session');
+        localStorage.removeItem('upjhs_simulated_session');
+        window.dispatchEvent(new Event('auth_session_changed'));
+      }
       return result.user;
     } catch (err: any) {
-      console.error("Google Signin failed:", err);
-      setError(err.message || 'Login failed.');
+      console.warn("Google Sign-In handled:", err?.code || err?.message || err);
+      let userMsg = err.message || 'Google Sign-In failed.';
+      if (err.code === 'auth/network-request-failed' || err.code === 'auth/unauthorized-domain') {
+        userMsg = "Google Sign-In is not enabled or this domain is not authorized in Firebase project 'unipranorthdbs2'. Please add this app's domain under Firebase Console > Authentication > Settings > Authorized Domains, or enable Google under Sign-in method. You can also explore using Quick-Access below.";
+      } else if (err.code === 'auth/operation-not-allowed') {
+        userMsg = "Google Sign-In provider is disabled in Firebase Console for 'unipranorthdbs2'. Please enable 'Google' under Authentication > Sign-in method, or explore using Quick-Access below.";
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        userMsg = "Sign-in popup was closed before completing verification.";
+      }
+      setError(userMsg);
       setLoading(false);
-      throw err;
+      throw new Error(userMsg);
     }
   };
 
@@ -183,52 +250,124 @@ export function useUser() {
   ) => {
     setError(null);
     setLoading(true);
-    try {
-      let firebaseUser: User;
+    const cleanEmail = email.toLowerCase().trim();
+    const isDemo = cleanEmail.endsWith('@upnjhs.ac.pg');
+
+    const activateSimulatedSession = (
+      roleToAssign?: UserRole, 
+      nameToAssign?: string,
+      classesToAssign?: string[],
+      studentIdToAssign?: string
+    ) => {
+      let role: UserRole = roleToAssign || assignedRole || 'Teacher';
+      let name = nameToAssign || displayName || 'Staff Member';
+      let studentIdentifier = studentIdToAssign || studentId;
+      let classIds = classesToAssign || assignedClassIds;
+
+      if (cleanEmail === 'admin@upnjhs.ac.pg' || cleanEmail.includes('admin')) {
+        role = 'Administrator';
+        name = nameToAssign || displayName || 'Principal Richard Sarpong';
+      } else if (cleanEmail === 'headmistress@upnjhs.ac.pg' || cleanEmail === 'headteacher@upnjhs.ac.pg' || cleanEmail.includes('head')) {
+        role = 'Headmistress';
+        name = nameToAssign || displayName || 'Mrs. Elizabeth Daniels (Head Teacher)';
+      } else if (cleanEmail === 'teacher@upnjhs.ac.pg' || cleanEmail.includes('teacher')) {
+        role = 'Teacher';
+        name = nameToAssign || displayName || 'Madam Joyce Appiah (Form Teacher)';
+        classIds = classIds || ['JHS1A', 'JHS2A', 'JHS3A'];
+      } else if (cleanEmail === 'exams@upnjhs.ac.pg' || cleanEmail.includes('exam')) {
+        role = 'Examinations Officer';
+        name = nameToAssign || displayName || 'Mr. Isaac Kofi (Exams Officer)';
+      } else if (cleanEmail === 'student@upnjhs.ac.pg' || cleanEmail.includes('student')) {
+        role = 'Student';
+        name = nameToAssign || displayName || 'Kwame Mensah (Student)';
+        studentIdentifier = studentIdentifier || 'UP-JHS-2024-001';
+      }
+
+      const simulatedUid = 'demo-' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+      const simulatedUser: any = {
+        uid: simulatedUid,
+        email: cleanEmail,
+        displayName: name,
+        emailVerified: true,
+        isAnonymous: false,
+      };
+
+      const simulatedProfile: AppUser = {
+        id: simulatedUid,
+        name: name,
+        email: cleanEmail,
+        role: role,
+        status: 'Active',
+        assignedClassIds: classIds,
+        studentId: studentIdentifier,
+        createdAt: new Date().toISOString(),
+      };
+
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('upjhs_simulated_session', JSON.stringify({ user: simulatedUser, profile: simulatedProfile }));
+          localStorage.setItem('upjhs_simulated_session', JSON.stringify({ user: simulatedUser, profile: simulatedProfile }));
+          window.dispatchEvent(new Event('auth_session_changed'));
+        } catch {}
+      }
+
+      setUser(simulatedUser);
+      setProfile(simulatedProfile);
+      setLoading(false);
+
+      // Attempt anonymous sign in if enabled on Firebase
       try {
-        const result = await signInWithEmailAndPassword(auth, email, password);
+        signInAnonymously(auth).catch(() => {});
+      } catch {}
+
+      return simulatedUser;
+    };
+
+    try {
+      let firebaseUser: User | null = null;
+      try {
+        const result = await signInWithEmailAndPassword(auth, cleanEmail, password);
         firebaseUser = result.user;
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('upjhs_simulated_session');
+          localStorage.removeItem('upjhs_simulated_session');
+          window.dispatchEvent(new Event('auth_session_changed'));
+        }
       } catch (signInErr: any) {
-        // Handle demo account provisioning if email-password is not registered on auth yet
-        const isDemo = email.endsWith('@upnjhs.ac.pg');
-        if (isDemo && (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential' || signInErr.code === 'auth/invalid-email')) {
-          console.log("Demo account not found, provisioning sandbox account:", email);
-          const signupResult = await createUserWithEmailAndPassword(auth, email, password);
-          firebaseUser = signupResult.user;
-          // Set registration metadata
-          if (displayName && assignedRole) {
-            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-            const newProfile: AppUser = {
-              id: firebaseUser.uid,
-              name: displayName,
-              email: email,
-              role: assignedRole,
-              status: 'Active',
-              assignedClassIds: assignedClassIds || (assignedRole === 'Teacher' ? ['JHS1A', 'JHS2A', 'JHS3A'] : undefined),
-              studentId: studentId || (assignedRole === 'Student' ? 'UP-JHS-2024-001' : undefined),
-              createdAt: new Date().toISOString(),
-            };
-            try {
-              await setDoc(userDocRef, newProfile);
-            } catch (persistErr) {
-              console.warn("Could not persist user profile to Firestore:", persistErr);
-            }
-            setProfile(newProfile);
+        if (signInErr.code === 'auth/operation-not-allowed') {
+          if (isDemo) {
+            return activateSimulatedSession(assignedRole, displayName, assignedClassIds, studentId);
           }
+          throw signInErr;
+        } else if (isDemo && (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential' || signInErr.code === 'auth/invalid-email')) {
+          try {
+            const signupResult = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+            firebaseUser = signupResult.user;
+          } catch (createErr: any) {
+            if (createErr.code === 'auth/operation-not-allowed' || createErr.code === 'auth/network-request-failed') {
+              return activateSimulatedSession(assignedRole, displayName, assignedClassIds, studentId);
+            }
+            throw createErr;
+          }
+        } else if (isDemo && signInErr.code === 'auth/network-request-failed') {
+          return activateSimulatedSession(assignedRole, displayName, assignedClassIds, studentId);
         } else {
           throw signInErr;
         }
       }
+
       return firebaseUser;
     } catch (err: any) {
-      console.error("Email login failed:", err);
+      console.warn("Email login handled:", err?.code || err?.message || err);
       let cleanedMsg = err.message || 'Login failed.';
       if (err.code === 'auth/operation-not-allowed') {
-        cleanedMsg = 'Email/Password Authentication is not enabled in Firebase Console. Please sign in with Google or enable this provider.';
+        cleanedMsg = "Email/Password sign-in is not enabled in Firebase Console for 'unipranorthdbs2'. Please enable 'Email/Password' under Firebase Console > Authentication > Sign-in method, or explore using Quick-Access below.";
       } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        cleanedMsg = 'Invalid email address or passcode. Please check your credentials and try again.';
+        cleanedMsg = 'Invalid email address or passcode. Please check your credentials or click a Quick-Access profile below.';
       } else if (err.code === 'auth/invalid-email') {
         cleanedMsg = 'The email address is formatted incorrectly.';
+      } else if (err.code === 'auth/network-request-failed') {
+        cleanedMsg = 'Network connectivity issue reaching Firebase authentication server. Please check your internet connection or use Quick-Access.';
       }
       setError(cleanedMsg);
       setLoading(false);
@@ -269,14 +408,16 @@ export function useUser() {
       setProfile(newProfile);
       return firebaseUser;
     } catch (err: any) {
-      console.error("Email signup failed:", err);
+      console.warn("Email signup handled:", err?.code || err?.message || err);
       let cleanedMsg = err.message || 'Registration failed.';
       if (err.code === 'auth/operation-not-allowed') {
-        cleanedMsg = 'Email/Password Authentication is not enabled in Firebase Console. Please sign in with Google or enable this provider.';
+        cleanedMsg = "Email/Password sign-in is not enabled in Firebase project 'unipranorthdbs2'. Please enable 'Email/Password' in Firebase Console (Authentication > Sign-in method) or use Quick-Access below.";
       } else if (err.code === 'auth/email-already-in-use') {
         cleanedMsg = 'This email address is already registered in the school system.';
       } else if (err.code === 'auth/weak-password') {
         cleanedMsg = 'The password must be at least 6 characters.';
+      } else if (err.code === 'auth/network-request-failed') {
+        cleanedMsg = 'Network connectivity issue reaching Firebase authentication server.';
       }
       setError(cleanedMsg);
       setLoading(false);
@@ -287,13 +428,18 @@ export function useUser() {
   const logout = async () => {
     setError(null);
     try {
-      await firebaseSignOut(auth);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('upjhs_simulated_session');
+        localStorage.removeItem('upjhs_simulated_session');
+        window.dispatchEvent(new Event('auth_session_changed'));
+      }
+      await firebaseSignOut(auth).catch(() => {});
       setProfile(null);
       setUser(null);
     } catch (err: any) {
-      console.error("Logout failed:", err);
-      setError(err.message || 'Signout failed.');
-      throw err;
+      console.warn("Logout handled cleanly:", err?.message || err);
+      setProfile(null);
+      setUser(null);
     }
   };
 

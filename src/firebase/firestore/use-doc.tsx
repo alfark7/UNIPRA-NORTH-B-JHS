@@ -23,10 +23,13 @@ export function useDoc<T>(
     let isCancelled = false;
     let unsubscribeSnapshot: (() => void) | null = null;
 
-    const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
+    const checkAuthStatus = (currentUser: any) => {
       if (isCancelled) return;
 
-      if (!currentUser) {
+      const hasSimulatedSession = typeof window !== 'undefined' && 
+        Boolean(sessionStorage.getItem('upjhs_simulated_session') || localStorage.getItem('upjhs_simulated_session'));
+
+      if (!currentUser && !hasSimulatedSession) {
         if (unsubscribeSnapshot) {
           try {
             unsubscribeSnapshot();
@@ -73,7 +76,16 @@ export function useDoc<T>(
           setLoading(false);
         }
       }
-    });
+    };
+
+    const unsubscribeAuth = auth.onAuthStateChanged(checkAuthStatus);
+    const handleSessionChange = () => checkAuthStatus(auth.currentUser);
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth_session_changed', handleSessionChange);
+    }
+
+    checkAuthStatus(auth.currentUser);
 
     return () => {
       isCancelled = true;
@@ -86,6 +98,9 @@ export function useDoc<T>(
         unsubscribeSnapshot = null;
       }
       unsubscribeAuth();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('auth_session_changed', handleSessionChange);
+      }
     };
   }, [docRef, auth]);
 
